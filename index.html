@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Three.js Clock Animation</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=1, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            -webkit-tap-highlight-color: transparent
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+
+        }
+
+    </style>
+</head>
+<body>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+        import Stats from 'three/addons/libs/stats.module.js';
+
+        const isMobile = window.matchMedia("(pointer: coarse)").matches ||
+                         /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+        let scene, camera, renderer, clock, stats;
+        let perspectiveCamera, orthoCamera, activeCamera;
+        let sounds = {};
+        let controls;
+        let mixers = {};
+        let skeletons = {};
+        let allAnimations = [];
+        let gltfAnimations = [];
+        let panel, panelSettings = { 
+            currentTime: '',
+            ISTTime: '',
+            UTCTime: '',
+            JSTTime: '',
+            CETTime: '',
+            ESTTime: '',
+            CAM_View: false
+         };
+
+        let tickSound;
+
+        init();
+        animate();
+
+        function scheduleAnimation() {
+
+            let prevTime = null;
+
+            function updateDigitAnimation() {
+                const now = new Date();
+                const minutes = now.getMinutes();
+                const hours = now.getHours();
+
+                const newDigits = [
+                    Math.floor(hours / 10),
+                    hours % 10,
+                    Math.floor(minutes / 10),
+                    minutes % 10
+                ];
+
+                if (!prevTime) {
+                    prevTime = newDigits;
+                    newDigits.forEach((digit, index) =>{
+                        updateClockAnimationForMesh(`MESH${index + 1}`, digit);
+                    });
+                } else{
+                    newDigits.forEach((digit, index) => {
+                        if (digit !== prevTime[index]) {
+                            updateClockAnimationForMesh(`MESH${index + 1}`, digit);
+                        }
+                    });
+                    prevTime = newDigits;
+                    
+                }
+                
+                console.log("Running updateDigitAnimation at:", now.toLocaleTimeString());
+            }
+
+            updateDigitAnimation();
+            
+            const now = new Date();
+            const delay = (60 -  now.getSeconds())* 1000- now.getMilliseconds();
+
+            setTimeout(() => {
+                updateDigitAnimation();
+                
+                setInterval(updateDigitAnimation, 60 * 1000);
+            }, delay);
+        }
+
+        function init() {
+            
+            scene = new THREE.Scene();
+
+             const isMobile =window.matchMedia("(pointer: coarse)").matches ||
+                             /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+            if (isMobile) {
+                camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, .1, 1000);
+            } else{
+                camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, .1, 1000);
+            }
+
+            camera.position.set(0, 1, 5);
+
+            scene.background = new THREE.Color(0xa0a0a0);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 1, 0);
+            controls.enableZoom = true;
+            controls.enablePan = true;
+            controls.update();
+
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 3);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 3);
+            dirLight.position.set(3, 10, 10);
+            scene.add(dirLight);
+
+            clock = new THREE.Clock();
+
+            stats = new Stats();
+
+            document.body.appendChild(stats.dom);
+
+            // Load Model
+            const loader = new GLTFLoader();
+            const modelPath = new URL('./models/gltf/learning1.glb', import.meta.url);
+            loader.load(modelPath.href,  function (gltf) {
+                const model = gltf.scene;
+                scene.add(model);
+                gltfAnimations = gltf.animations;
+
+                model.traverse((object) => {
+                    if (object.isSkinnedMesh) {
+                        let skeletonName = object.parent.name;
+                        if (!skeletons[skeletonName]) {
+                            skeletons[skeletonName] = new THREE.SkeletonHelper(object);
+                            scene.add(skeletons[skeletonName]);
+                        }
+                        if (!mixers[skeletonName]) {
+                            mixers[skeletonName] = new THREE.AnimationMixer(object);
+                        }
+                    }
+                });
+
+                const aspect = window.innerWidth / window.innerHeight;
+
+                perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 1, 100);
+                perspectiveCamera.position.set(0, 1, 5);
+
+                const frustumSize = 5;
+                orthoCamera = new THREE.OrthographicCamera(
+                    frustumSize * aspect / -2,
+                    frustumSize * aspect / 2,
+                    frustumSize / 2,
+                    frustumSize / -2,
+                    0.1,
+                    100
+                );
+
+                const listener = new THREE.AudioListener();
+                camera.add(listener);
+
+                const soundLoader = new THREE.AudioLoader();
+                
+                  tickSound = new THREE.Audio(listener);
+                    soundLoader.load(`./sounds/tick.mp3`, function(buffer) {
+                        tickSound.setBuffer(buffer);
+                        tickSound.setVolume(0.5);
+                        console.log("Tick sound loaded");
+                    });
+                
+
+                orthoCamera.position.set(0, 1, 5);
+                orthoCamera.lookAt(0, 1, 0);
+                window.addEventListener("message", (event) => {
+                    if (event.data === "toggleCameraView") {
+                        const toggle = document.getElementById("cameraToggle");
+                        if (toggle && !toggle.checked) {
+                            toggle.checked = true;
+                            toggle.dispatchEvent(new Event('change'));
+                        }
+                    }
+                });
+
+                activeCamera = perspectiveCamera;
+
+                controls.object = activeCamera;
+                controls.update();
+
+                controls.enableRotate = true;
+
+                setupAnimations();
+                
+                createPanel();  // 👈 Create  after model loads
+
+                scheduleAnimation();
+
+                fetchAndLogTimezones();
+
+                setInterval(fetchAndLogTimezones, 60000); 
+
+                setInterval(updateClockDisplay, 60000); //Once per minute  ok
+                
+                window.addEventListener('keydown', (e) =>{
+                    console.log("Key pressed", e.key);
+                });
+
+            });
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createPanel() {
+            panel = new GUI({ width: 280 });
+
+            const Folder1 = panel.addFolder('Current Time');
+            panelSettings.currentTime = getCurrentTime();
+            Folder1.add(panelSettings, 'currentTime').listen();
+            
+
+            const Folder2 = panel.addFolder('IST TIME');
+            Folder2.add(panelSettings, 'ISTTime').listen();
+
+            const Folder3 = panel.addFolder('JST Time');
+            Folder3.add(panelSettings, 'JSTTime').listen();
+
+            const Folder4 = panel.addFolder('UTC Time');
+            Folder4.add(panelSettings, 'UTCTime').listen();
+
+            const Folder5 = panel.addFolder('CET/CEST Time');
+            Folder5.add(panelSettings, 'CETTime').listen();
+
+            const Folder6 = panel.addFolder('EST Time');
+            Folder6.add(panelSettings, 'ESTTime').listen();
+
+            panel.add(panelSettings, 'CAM_View').name('Camera View').onChange((value) => {
+                activeCamera = value? orthoCamera : perspectiveCamera;
+                controls.object= activeCamera;
+
+                const isOrtho = (activeCamera === orthoCamera);
+                controls.enableRotate = !isOrtho;
+                controls.enableZoom = !isOrtho;
+                controls.enablePan = false;
+                
+                controls.update();
+            });
+
+            if(isMobile) {
+                Folder1.close();
+                Folder2.close();
+                Folder3.close();
+                Folder4.close();
+                Folder5.close();
+                Folder6.close();
+
+                panel.domElement.style.position = '200px';
+                panel.domElement.style.fontSize = '12px';
+            } else{
+
+                Folder1.open();
+                Folder2.open();
+                Folder3.open();
+                Folder4.open();
+                Folder5.open();
+                Folder6.open();  
+
+            }
+            
+        }
+
+        function getCurrentTime() {
+            const now = new Date();
+            return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function updateClockDisplay() {
+            panelSettings.currentTime = getCurrentTime();
+        }
+
+        async function fetchAndLogTimezones() {
+            console.log('Fetching timezones...');
+
+            const timezones = [
+                { name: 'India (IST)', url: 'https://worldtimeapi.org/api/timezone/Asia/Kolkata', key: 'ISTTime'},
+                { name: 'UTC', url: 'https://worldtimeapi.org/api/timezone/Etc/UTC', key: 'UTCTime'},
+                { name: 'Japan (JST)', url: 'https://worldtimeapi.org/api/timezone/Asia/Tokyo', key: 'JSTTime' },
+                { name: 'Germany (CET/CEST)', url: 'https://worldtimeapi.org/api/timezone/Europe/Berlin', key: 'CETTime' },
+                { name: 'America (New York)', url: 'https://worldtimeapi.org/api/timezone/America/New_York', key: 'ESTTime' }
+            ];
+
+            for (const tz of timezones) {
+                try{
+                    const response = await fetch (tz.url);
+                    if (!response.ok) throw new Error('Failed to fetch');
+
+                    const data = await response.json();
+
+                    panelSettings[tz.key] = data.datetime.slice(11, 16);
+                    console.log(`${tz.name} Time: ${panelSettings[tz.key]}`);
+
+                } catch (error) {
+                    console.error(`Failed to fetch time for ${tz.name}:`, error);
+                    panelSettings[tz.key] = "N/A";
+                }
+            }
+        }
+
+        function updateClockAnimation() {
+            const now = new Date();
+            let digits = [
+                Math.floor(now.getHours() / 10), now.getHours() % 10,
+                Math.floor(now.getMinutes() / 10), now.getMinutes() % 10
+            ];
+            let skeletonNames = ["MESH1", "MESH2", "MESH3", "MESH4"];
+
+            skeletonNames.forEach((skeleton, index) => {
+                let digit = digits[index];
+                let digitName = numberToWord(digit);
+                let clip = gltfAnimations.find(anim => anim.name.includes(skeleton) && anim.name.includes(digitName));
+
+                if (clip && mixers[skeleton]) {
+                    let mixer = mixers[skeleton];
+                    mixer.stopAllAction();
+                    let action = mixer.clipAction(clip);
+                    action.reset().play();
+                }
+            });
+            console.log(`Updating clock animation: ${digits.join('')}`);
+        }
+
+        function triggerAnimation(skeletonName) {
+            if (allAnimations[skeletonName]) {
+                allAnimations[skeletonName].forEach((action) =>{
+                    action.reset();
+                    action.play();
+                });
+            }
+        }
+
+        function updateDigitAnimation(digits) {
+            let skeletonNames = ["MESH1", "MESH2", "MESH3", "MESH4"];
+
+            skeletonNames.forEach((skeleton, index) => {
+                let digit = digits[index];
+               
+                if(digit !== null) {
+                    let digitName = numberToWord(digit);
+                    let clip = gltfAnimations.find(anim => anim.name.includes(digitName));
+
+                    if(clip && mixers[skeleton]) {
+                        let mixer = mixers[skeleton];
+
+                        mixer.stopAllAction();
+
+                        let action = mixer.clipAction(clip);
+                        action.reset();
+                        action.setLoop(THREE.LoopOnce);
+                        action.clampWhenFinished = true;
+                        action.play();
+                    }
+                }
+            });
+
+            console.log(`Clock animation set to: ${digits.join('')}`)
+        }
+
+        function setupAnimations() {
+            gltfAnimations.forEach((clip) => {
+                let skeletonName = getSkeletonsFromClipname(clip.name);
+
+                if (skeletonName && mixers[skeletonName]) {
+                    let action = mixers[skeletonName].clipAction(clip);
+                    action.play();
+                    if(!allAnimations[skeletonName]) {
+                        allAnimations[skeletonName] = [];
+                    }
+                    allAnimations[skeletonName].push(action);
+                }
+            });
+        }
+
+        function numberToWord(num) {
+            const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+            return words[num];
+        }
+
+        function getSkeletonsFromClipname(name) {
+            if (name.includes("MESH1")) return "MESH1";
+            if (name.includes("MESH2")) return "MESH2";
+            if (name.includes("MESH3")) return "MESH3";
+            if (name.includes("MESH4")) return "MESH4";
+            return null;
+        }
+
+        function updateClockAnimationForMesh(skeletonName, digit){
+            let digitName = numberToWord(digit);
+            let clip = gltfAnimations.find(anim => anim.name.includes(digitName));
+
+            if(clip && mixers[skeletonName]) {
+                let mixer =mixers[skeletonName];
+                mixer.stopAllAction();
+                let action = mixer.clipAction(clip);
+                action.reset();
+                action.setLoop(THREE.LoopOnce);
+                action.clampWhenFinished = true;
+                action.play();
+
+
+                if (tickSound && tickSound.isPlaying){
+                    tickSound.stop();
+                }   
+                if (tickSound && tickSound.buffer) {
+                    tickSound.play();
+                }
+            }
+
+            console.log(`Animation ${skeletonName} with digit ${digit}`);
+
+        }
+
+        function onWindowResize() {
+            const aspect = window.innerWidth / window.innerHeight;
+    
+            activeCamera.aspect = aspect;
+            activeCamera.updateProjectionMatrix();
+
+             if (orthoCamera) {
+                const frustumSize = 5;
+                orthoCamera.left = -frustumSize * aspect / 2;
+                orthoCamera.right = frustumSize * aspect / 2;
+                orthoCamera.top = frustumSize / 2;
+                orthoCamera.bottom = -frustumSize / 2;
+                orthoCamera.updateProjectionMatrix();
+            }
+ 
+            if (window.innerWidth < 768) {
+                camera.fov = 55;
+                camera.position.set(-1.5, 2.5, 4);
+            } else {
+                camera.fov = 45;
+                camera.position.set(-1, 2, 3);
+            }
+                    
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.addEventListener('resize', onWindowResize);
+
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            Object.values(mixers).forEach(mixer => mixer.update(delta));
+
+            stats.update();
+            
+            renderer.render(scene, activeCamera);
+
+
+        }
+    </script>
+</body>
+</html>
+
