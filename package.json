@@ -1,0 +1,30 @@
+{
+  "name": "three.js_clock-main",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [],
+  "author": "AMARNATH",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12"
+  },
+  "description": "CLOCK WIDGET",
+  "build": {
+    "appId": "com.amarnath.threejsclock",
+    "productName": "ThreeJSClock",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico",
+      "verifyUpdateCodeSignature": false,
+      "forceCodeSigning": false
+      
+    }
+  }
+}
