@@ -236,6 +236,9 @@
                 orthoCamera.position.set(0, 0, 18);
                 orthoCamera.lookAt(0, 0, 0);
 
+                orthoCamera.zoom = 1.3;
+                orthoCamera.updateProjectionMatrix();
+
                 // Message listener (keeps your existing logic)
                 window.addEventListener("message", (event) => {
                     if (event.data === "toggleCameraView") {
