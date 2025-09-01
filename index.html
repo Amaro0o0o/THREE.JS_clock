@@ -208,7 +208,7 @@
 
                 // Create dedicated perspective camera for final view
                 perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 1, 100);
-                perspectiveCamera.position.set(0, 1, 5);
+                perspectiveCamera.position.set(0, 0, 5);
 
                 // Create orthographic camera for locked view in iframe
                 const frustumSize = 5;
@@ -234,7 +234,7 @@
                 });
 
                 orthoCamera.position.set(0, 1, 5);
-                orthoCamera.lookAt(0, 1, 0);
+                orthoCamera.lookAt(0, 0, 0);
 
                 // Message listener (keeps your existing logic)
                 window.addEventListener("message", (event) => {
