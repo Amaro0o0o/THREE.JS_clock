@@ -206,7 +206,7 @@
 
                 const aspect = window.innerWidth / window.innerHeight;
 
-                // Create dedicated perspective camera for final view
+                // Create a dedicated perspective camera for the final view
                 perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 1, 100);
                 perspectiveCamera.position.set(0, 0, 5);
 
@@ -233,7 +233,7 @@
                     console.log("Tick sound loaded");
                 });
 
-                orthoCamera.position.set(0, 10, 5);
+                orthoCamera.position.set(0, 10, 10);
                 orthoCamera.lookAt(0, 0, 0);
 
                 // Message listener (keeps your existing logic)
