@@ -176,7 +176,7 @@
             if (insideIframe) {
                 if (stats) stats.dom.style.display = 'none';
                 if (controls) {
-                    // disable controls input until we decide which camera will be active
+                    // disable controls input until we decide which camera will be the active
                     controls.enabled = false;
                 }
             }
@@ -219,7 +219,7 @@
                 const iframeWidth = 180;
                 const iframeHeight = 80;
                 const aspectIframe = iframeWidth / iframeHeight;
-                const frustumSize = size.y * 3;
+                const frustumSize = size.y * 1.8;
 
                 orthoCamera = new THREE.OrthographicCamera(
                     -frustumSize * aspectIframe / 2,
