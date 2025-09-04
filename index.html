@@ -219,7 +219,7 @@
                 const iframeWidth = 180;
                 const iframeHeight = 80;
                 const aspectIframe = iframeWidth / iframeHeight;
-                const frustumSize = size.y * 1.4;
+                const frustumSize = size.y * 3;
 
                 orthoCamera = new THREE.OrthographicCamera(
                     -frustumSize * aspectIframe / 2,
@@ -230,7 +230,7 @@
                     1000
                 );
 
-                orthoCamera.position.set(center.x, center.y, center.z + size.z * 2);
+                orthoCamera.position.set(center.x, center.y, center.z + size.z * 5);
                 orthoCamera.lookAt(center);
                 orthoCamera.updateProjectionMatrix();
                 
